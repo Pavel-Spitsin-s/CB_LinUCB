@@ -52,8 +52,8 @@
     где $N_{t-1}(a)$ — число выборов руки $a$ до состояния $t$.
     \item Параметр $\varepsilon\in[0,1]$ балансирует exploitation и exploration:
     \begin{itemize}
-      \item Малое $\varepsilon$ — мало исследования, быстрое «залипание» на локальном оптимуме.
-      \item Большое $\varepsilon$ — много случайных шагов, замедленное сходление.
+      \item Малое $\varepsilon$ — мало исследования, долгая сходимость.
+      \item Большое $\varepsilon$ — при нахождении оптимальной ручки много неоптимальных действий.
     \end{itemize}
     \item Простейшая стратегия, легко реализуется и анализируется.
   \end{itemize}
@@ -162,6 +162,39 @@
   \begin{itemize}
     \item LinUCB демонстрирует более быстрый спад регрета.
     \item Что не удивительно, так как в задаче важен контекст.
+    \item Для датасетов большой размерности проблемно применять подобные методы.
+  \end{itemize}
+\end{frame}
+\begin{frame}{Алгоритм EXP4}
+  \begin{itemize}
+    \item EXP4 (Exponential-weight algorithm for Exploration and Exploitation using Experts).
+    \item Есть $N$ экспертов, каждый эксперт $i$ задаёт распределение $\xi_{t,i}=(\xi_{t,i,a})_{a\in A}$.
+    \item Веса экспертов $w_{1,i}=1$, обновление:
+    \[ w_{t+1,i} = w_{t,i} \exp\Bigl(\frac{\eta}{|A|}\,\hat{r}_{t,a_t}\,\frac{\xi_{t,i,a_t}}{p_{t,a_t}}\Bigr), \]
+    где $p_{t,a}=\sum_i \frac{w_{t,i}}{\sum_j w_{t,j}}\,\xi_{t,i,a}$ и $\hat{r}_{t,a_t}=r_{t,a_t}/p_{t,a_t}$.
+    \item Выбор действия $a_t\sim p_t$ гарантирует регрет $O(\sqrt{T|A|\ln N})$.
+  \end{itemize}
+\end{frame}
+
+%% Слайд HybridUCB
+\begin{frame}{Алгоритм HybridUCB}
+  \begin{itemize}
+    \item Расширение LinUCB: учитываем общие и специфические признаки.
+    \item Модель: $E[r_{t,a}\mid z_{t,a},x_{t,a}] = z_{t,a}^\top\beta + x_{t,a}^\top\theta_a$.
+    \item Расчёт UCB: 
+    \[ p_{t,a} = z_{t,a}^\top\hat{\beta} + x_{t,a}^\top\hat{\theta}_a + \alpha\sqrt{s_{t,a}}, \]
+    \[ s_{t,a} = z_{t,a}^\top A_0^{-1}z_{t,a} - 2z_{t,a}^\top A_0^{-1}B_a^\top A_a^{-1}x_{t,a} + x_{t,a}^\top A_a^{-1}x_{t,a} + x_{t,a}^\top A_a^{-1} B_a A_0^{-1} B_a^\top A_a^{-1} x_{t,a}. \]
+    \item Обновления параметров:
+    \begin{align*}
+      A_0 &\leftarrow A_0 + B_{a_t}^\top A_{a_t}^{-1} B_{a_t} + z_{t,a_t}z_{t,a_t}^\top, \\
+      b_0 &\leftarrow b_0 + B_{a_t}^\top A_{a_t}^{-1} b_{a_t} + r_{t,a_t}z_{t,a_t},
+    \end{align*}
+    и для выбранного $a_t$:
+    \begin{align*}
+      A_{a_t} &\leftarrow A_{a_t} + x_{t,a_t}x_{t,a_t}^\top, \\
+      B_{a_t} &\leftarrow B_{a_t} + x_{t,a_t}z_{t,a_t}^\top, \\
+      b_{a_t} &\leftarrow b_{a_t} + r_{t,a_t}x_{t,a_t}.
+    \end{align*}
   \end{itemize}
 \end{frame}
 
