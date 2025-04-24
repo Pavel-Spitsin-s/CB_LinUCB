@@ -55,7 +55,7 @@
       \item Малое $\varepsilon$ — мало исследования, долгая сходимость.
       \item Большое $\varepsilon$ — при нахождении оптимальной ручки много неоптимальных действий.
     \end{itemize}
-    \item Простейшая стратегия, легко реализуется и анализируется. Даже при нахождении оптимальной ручки имеем бесконечно большой регрет из-за $\varepsilon$ доли не оптимальных действий
+    \item Простейшая стратегия, легко реализуется и анализируется.
   \end{itemize}
 \end{frame}
 
@@ -72,7 +72,7 @@
     \end{itemize}
     \item Выбор руки, максимизирующей UCB:
     $$a_t = \arg\max_a UCB_{t,a}.$$  
-    \item Классический метод, гарантирующий регрет $O\bigl(\sqrt{KT\ln T}\bigr)$ для $K$ рук и $T$ шагов.
+    \item Классический метод, гарантирующий регрет $O\bigl(\sqrt{|A|T\ln T}\bigr)$ для $K$ рук и $T$ шагов.
     \item Интуиция: рука с небольшим $N(a)$ получает большой бонус и исследуется чаще.
   \end{itemize}
 \end{frame}
@@ -162,9 +162,110 @@
   \begin{itemize}
     \item LinUCB демонстрирует более быстрый спад регрета.
     \item Что не удивительно, так как в задаче важен контекст.
+    \item Для датасетов большой размерности проблемно применять подобные методы.
+  \end{itemize}
+\end{frame}
+\begin{frame}{Алгоритм EXP4}
+  \begin{itemize}
+    \item EXP4 (Exponential-weight algorithm for Exploration and Exploitation using Experts).
+    \item Имеется $N$ экспертов, каждый эксперт $i$ задаёт распределение $\xi_{t,i} = (\xi_{t,i,1}, ..., \xi_{t,i,K})$ над действиями.
+    \item Веса экспертов инициализируются $w_{1,i} = 1$. Обновление весов:
+    \[
+    w_{t+1,i} = w_{t,i} \exp\left(\frac{\gamma}{K} \cdot \hat{y}_{t,i}\right),
+    \]
+    где 
+    \begin{align*}
+    p_{t,a} &= (1-\gamma)\frac{\sum_{i=1}^N w_{t,i}\xi_{t,i,a}}{W_t} + \frac{\gamma}{K}, \\
+    \hat{r}_{t,a} &= \begin{cases}
+    \frac{r_{t,a}}{p_{t,a}}, & \text{если } a = a_t \\
+    0, & \text{иначе}
+    \end{cases} \\
+    \hat{y}_{t,i} &= \xi_{t,i} \cdot \hat{r}_t = \sum_{a=1}^K \xi_{t,i,a}\hat{r}_{t,a}
+    \end{align*}
+    \item Выбор действия $a_t\sim p_t$ гарантирует регрет $O(\sqrt{T|A|\ln N})$.
   \end{itemize}
 \end{frame}
 
+%% Слайд HybridUCB
+\begin{frame}{Алгоритм HybridUCB}
+  \begin{itemize}
+    \item Расширение LinUCB: учитываем общие и специфические признаки.
+    \item Модель: $E[r_{t,a}\mid z_{t,a},x_{t,a}] = z_{t,a}^\top\beta + x_{t,a}^\top\theta_a$.
+    \item Расчёт UCB: 
+    \[ p_{t,a} = z_{t,a}^\top\hat{\beta} + x_{t,a}^\top\hat{\theta}_a + \alpha\sqrt{s_{t,a}}, \]
+    \[ s_{t,a} = z_{t,a}^\top A_0^{-1}z_{t,a} - 2z_{t,a}^\top A_0^{-1}B_a^\top A_a^{-1}x_{t,a} + x_{t,a}^\top A_a^{-1}x_{t,a} + x_{t,a}^\top A_a^{-1} B_a A_0^{-1} B_a^\top A_a^{-1} x_{t,a}. \]
+    \item Обновления параметров:
+    \begin{align*}
+      A_0 &\leftarrow A_0 + B_{a_t}^\top A_{a_t}^{-1} B_{a_t} + z_{t,a_t}z_{t,a_t}^\top, \\
+      b_0 &\leftarrow b_0 + B_{a_t}^\top A_{a_t}^{-1} b_{a_t} + r_{t,a_t}z_{t,a_t},
+    \end{align*}
+    и для выбранного $a_t$:
+    \begin{align*}
+      A_{a_t} &\leftarrow A_{a_t} + x_{t,a_t}x_{t,a_t}^\top, \\
+      B_{a_t} &\leftarrow B_{a_t} + x_{t,a_t}z_{t,a_t}^\top, \\
+      b_{a_t} &\leftarrow b_{a_t} + r_{t,a_t}x_{t,a_t}.
+    \end{align*}
+  \end{itemize}
+\end{frame}
+\begin{frame}{Алгоритм D-LinUCB}
+  \begin{itemize}
+    \item Модель: $X_t = \langle A_t, \theta^*_t\rangle + \eta_t$, где $\theta^*_t$ меняется во времени.
+    \item Дисконтированные веса: $w_{t,s}=\gamma^{t-s}$, $0<\gamma<1$; регуляризация $\lambda>0$.
+    \item Обновляем оценку параметра:
+    \[
+      \hat\theta_{t-1} = \arg\min_{\theta} \sum_{s=1}^{t-1} \gamma^{t-1-s}(X_s - \langle A_s,\theta\rangle)^2 + \lambda\|\theta\|^2_2.
+    \]
+    \item Определяем матрицы:
+    \begin{aligned}
+      V_{t-1} &= \sum_{s=1}^{t-1} \gamma^{t-1-s} A_s A_s^\top + \lambda I_d,\\
+      \tilde V_{t-1} &= \sum_{s=1}^{t-1} \gamma^{2(t-1-s)} A_s A_s^\top + \lambda I_d.
+    \end{aligned}
+    \item Доверительный радиус при уровне $1-\delta$:
+    \[
+      \beta_{t-1} = \sqrt{\lambda}\,S + \sigma\sqrt{2\ln\frac{1}{\delta} + d\ln\Bigl(1 + \frac{L^2(1-\gamma^{2(t-1)})}{\lambda(1-\gamma^2)}\Bigr)}.
+    \]
+    \item Upper Confidence Bound:
+    \[
+      p_{t,a} = \langle a,\hat\theta_{t-1}\rangle
+      + \beta_{t-1}\sqrt{a^\top V_{t-1}^{-1}\tilde V_{t-1}V_{t-1}^{-1}a}.
+    \]
+    \item Выбираем $A_t = \arg\max_{a\in A_t} p_{t,a}$, наблюдаем вознаграждение $X_t$.
+    \item Рекурсивные обновления:
+    \begin{aligned}
+      V_t &= \gamma V_{t-1} + A_tA_t^\top + (1-\gamma)\lambda I_d,\\
+      \tilde V_t &= \gamma^2 \tilde V_{t-1} + A_tA_t^\top + (1-\gamma^2)\lambda I_d,\\
+      b_t &= \gamma b_{t-1} + X_t A_t,\\
+      \hat\theta_t &= V_t^{-1} b_t.
+    \end{aligned}
+  \end{itemize}
+\end{frame}
+\begin{frame}{Сравнение}
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{trahat.jpg}
+  \end{center}
+\end{frame}
+\begin{frame}{Результаты}
+ \begin{table}[ht]
+    \centering
+    \begin{tabular}{l c}
+      \hline
+      \textbf{Метод} & \textbf{Iris Regret} \\
+      \hline
+      UCB (\(\alpha=1.0\)) & 33.47 \\
+      LinUCB (Disjoint, \(\alpha=1.0\)) & 12.93 \\
+      LinUCB (Hybrid, \(\alpha=1.0\)) & 12.99 \\
+      D-LinUCB (\(\alpha=1.0,\,\gamma=0.95\)) & 17.40 \\
+      \hline
+    \end{tabular}
+    \caption{Кумулятивный регрет на Iris}
+  \end{table}
+  \vspace{1em}
+  % Графики и регрет
+  \begin{itemize}
+    \item Различие между Hybrid и LinUCB очень мало $\Longrightarrow$ на Iris простая линейная модель уже почти полностью захватывает полезную информацию.
+    \item D-LinUCB «забывает» старые наблюдения, что в стационарном Iris-примере приводит к небольшому ухудшению.
+  \end{itemize}
+\end{frame}
 \begin{frame}{Заключение}
   \begin{itemize}
     \item LinUCB позволяет эффективно балансировать исследование и использование.
@@ -174,3 +275,28 @@
 \end{frame}
 
 \end{document}
+
+
+
+
+
+\begin{frame}{Алгоритм EXP4}
+  \begin{itemize}
+    \item EXP4 (Exponential-weight algorithm for Exploration and Exploitation using Experts).
+    \item Имеется $N$ экспертов, каждый эксперт $i$ задаёт распределение $\xi_{t,i} = (\xi_{t,i,1}, ..., \xi_{t,i,K})$ над действиями.
+    \item Веса экспертов инициализируются $w_{1,i} = 1$. Обновление весов:
+    \[
+    w_{t+1,i} = w_{t,i} \exp\left(\frac{\gamma}{K} \cdot \hat{y}_{t,i}\right),
+    \]
+    где 
+    \begin{align*}
+    p_{t,a} &= (1-\gamma)\frac{\sum_{i=1}^N w_{t,i}\xi_{t,i,a}}{W_t} + \frac{\gamma}{K}, \\
+    \hat{r}_{t,a} &= \begin{cases}
+    \frac{r_{t,a}}{p_{t,a}}, & \text{если } a = a_t \\
+    0, & \text{иначе}
+    \end{cases} \\
+    \hat{y}_{t,i} &= \xi_{t,i} \cdot \hat{r}_t = \sum_{a=1}^K \xi_{t,i,a}\hat{r}_{t,a}
+    \end{align*}
+    \item Выбор действия $a_t\sim p_t$ гарантирует регрет $O(\sqrt{T|A|\ln N})$.
+  \end{itemize}
+\end{frame}
