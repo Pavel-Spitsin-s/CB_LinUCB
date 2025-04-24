@@ -1,0 +1,176 @@
+% !TeX program = xelatex
+\documentclass[10pt]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usetheme{Madrid}
+
+\title{LinUCB в Multiarmed bandits:\\ Задача онлайн-классификации}
+\author{Спицын Павел, Мурзин Илья, Зинатулин Артём, Никифорова Анна, Глазов Иван, Газизуллин Нияз}
+\institute{Студкемп МФТИ x Яндекс}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Содержание}
+  \tableofcontents
+\end{frame}
+
+\section{Введение}
+\begin{frame}{Введение в проблему}
+  \begin{itemize}
+    \item Контекстные многорукие бандиты (Contextual Bandits) объединяют элементы классического \emph{exploration-exploitation}.
+    \item Задача: на каждом шаге выбирать действие (руку) на основе контекста и кумулятивного вознаграждения.
+    \item Применения: рекомендации, онлайн-задачи, принятие решений при неопределённости, торговые стратегии.
+  \end{itemize}
+\end{frame}
+
+\section{Постановка задачи}
+\begin{frame}{Формализация задачи}
+  На каждом шаге $t=1,2,\dots$:
+  \begin{enumerate}
+    \item Наблюдаем контексты $\{x_{t,a}\}_{a\in A_t}$, $x_{t,a}\in\mathbb{R}^d$.
+    \item Выбираем действие $a_t\in A_t$ по политике $\pi$.
+    \item Получаем вознаграждение $r_{t,a_t}\in[0,1]$, остальные $r_{t,a}$ неизвестны.
+  \end{enumerate}
+  Цель: максимизировать суммарный ожидаемый доход $\displaystyle \sum_{t=1}^T r_{t,a_t}$ или минимизировать регрет
+  \[ R(T)=\mathbb{E}\Bigl[\sum_t r_{t,a^*_t}-\sum_t r_{t,a_t}\Bigr]. \]
+\end{frame}
+\begin{frame}{Алгоритм $\boldsymbol{\varepsilon}$-greedy}
+  \begin{itemize}
+    \item Идея: в каждом шаге с вероятностью $1-\varepsilon$ выбираем действие, максимизирующее текущую оценку
+    $$a_t = \arg\max_a \hat{\mu}_{t-1,a},$$
+    с вероятностью $\varepsilon$ — случайное действие для исследования.
+    \item Оценка среднего вознаграждения для каждой руки $a$ после $t-1$ запусков:
+    $$\hat{\mu}_{t-1,a} = \frac{1}{N_{t-1}(a)} \sum_{s: a_s = a} r_s,$$
+    где $N_{t-1}(a)$ — число выборов руки $a$ до состояния $t$.
+    \item Параметр $\varepsilon\in[0,1]$ балансирует exploitation и exploration:
+    \begin{itemize}
+      \item Малое $\varepsilon$ — мало исследования, быстрое «залипание» на локальном оптимуме.
+      \item Большое $\varepsilon$ — много случайных шагов, замедленное сходление.
+    \end{itemize}
+    \item Простейшая стратегия, легко реализуется и анализируется.
+  \end{itemize}
+\end{frame}
+
+%% Слайд UCB1
+\begin{frame}{Алгоритм UCB (Upper Confidence Bound)}
+  \begin{itemize}
+    \item Каждый шаг $t$: для каждой руки $a$ вычисляем доверительный интервал:
+    $$UCB_{t,a} = \hat{\mu}_{t-1,a} + \alpha\sqrt{\frac{2\ln t}{N_{t-1}(a)}},$$
+    где
+    \begin{itemize}
+      \item $\hat{\mu}_{t-1,a}$ — среднее вознаграждение руки $a$ до шага $t$.
+      \item $N_{t-1}(a)$ — число выборов руки $a$ до шага $t$.
+      \item $\alpha$ — зачастую берут $\alpha=1$, \!может быть настроен.
+    \end{itemize}
+    \item Выбор руки, максимизирующей UCB:
+    $$a_t = \arg\max_a UCB_{t,a}.$$  
+    \item Классический метод, гарантирующий регрет $O\bigl(\sqrt{KT\ln T}\bigr)$ для $K$ рук и $T$ шагов.
+    \item Интуиция: рука с небольшим $N(a)$ получает большой бонус и исследуется чаще.
+  \end{itemize}
+\end{frame}
+\section{Метод LinUCB}
+\begin{frame}{Модель линейного вознаграждения}
+  Предполагается, что
+  \[
+    \mathbb{E}[r_{t,a}\mid x_{t,a}]=x_{t,a}^\top \theta^*_a,
+  \]
+  где $\theta^*_a\in\mathbb{R}^d$ неизвестен.\
+  Применяется \emph{ridge regression} для оценки:
+  \[
+    \hat{\theta}_a=(D_a^\top D_a + I)^{-1} D_a^\top c_a.
+  \]
+  Оценка верхней границы доверительного интервала:
+  \[
+    p_{t,a}=x_{t,a}^\top \hat{\theta}_a + \alpha\sqrt{x_{t,a}^\top A_a^{-1} x_{t,a}}.
+  \]
+\end{frame}
+
+\begin{frame}[fragile]{Алгоритм LinUCB}
+  \begin{block}{LinUCB (Disjoint)}
+  \begin{enumerate}
+    \item Инициализация для каждого действия $a$: $A_a=I_d$, $b_a=0_d$.
+    \item Для шага $t=1\dots T$:
+      \begin{itemize}
+        \item Наблюдаем $\{x_{t,a}\}_{a\in A_t}$.
+        \item Для каждого $a$ вычисляем:
+        \[
+          \hat{\theta}_a=A_a^{-1}b_a,\quad p_{t,a}=\hat{\theta}_a^\top x_{t,a}+\alpha\sqrt{x_{t,a}^\top A_a^{-1}x_{t,a}}.
+        \]
+        \item Выбираем $a_t=\arg\max_a p_{t,a}$, наблюдаем $r_{t,a_t}$.
+        \item Обновляем:
+        \[
+          A_{a_t} \leftarrow A_{a_t} + x_{t,a_t}x_{t,a_t}^\top,
+          \quad b_{a_t} \leftarrow b_{a_t} + r_{t,a_t} x_{t,a_t}.
+        \]
+      \end{itemize}
+  \end{enumerate}
+  \end{block}
+\end{frame}
+
+\section{Используемые данные}
+\begin{frame}{Датасеты}
+  \begin{itemize}
+    \item \textbf{Bibtex}: многометочная классификация публикаций.
+    \item \textbf{Mushrooms}: бинарная классификация съедобности грибов.
+    \item \textbf{Iris}: классификация цветков Ирисов.
+  \end{itemize}
+  Особенности: разные размерности и характеристики пространства признаков.
+\end{frame}
+
+\section{Эксперименты и результаты}
+\begin{frame}{Методология эксперимента}
+  \begin{itemize}
+    \item Онлайн-имитация: на каждом примере $i$ использовать LinUCB для выбора метки как «действие» и получать награду (1–точен, 0–ошибка).
+    \item Сравнение с базовыми методами: $\varepsilon$-greedy, UCB без контекста.
+    \item Показатели: кумулятивный регрет, среднее вознаграждение за раунд.
+  \end{itemize}
+\end{frame}
+\begin{frame}{Результаты}
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{ebut.jpg}
+  \end{center}
+\end{frame}
+\begin{frame}{Результаты}
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{ebut2.jpg}
+  \end{center}
+\end{frame}
+\begin{frame}{Результаты}
+  \begin{table}[ht]
+    \centering
+    \begin{tabular}{lccc}
+      \hline
+      \textbf{Метод} & \textbf{Bibtex Regret} & \textbf{Mushrooms Regret} & \textbf{Iris Regret} \\
+      \hline
+      $\varepsilon$-greedy &  3281.0 &  2434.0 & 1337.0 \\
+      UCB (context-free) & 3874.0 & 2505.0 & 1308.0 \\
+      \textbf{LinUCB } &2619.0& 32.0 & 136.0 \\
+      \hline
+    \end{tabular}
+    \caption{Точность различных методов}
+  \end{table}
+  \vspace{1em}
+  % Графики и регрет
+  \begin{itemize}
+    \item LinUCB демонстрирует более быстрый спад регрета.
+    \item Что не удивительно, так как в задаче важен контекст.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Заключение}
+  \begin{itemize}
+    \item LinUCB позволяет эффективно балансировать исследование и использование.
+    \item Метод применим к решению задач в онлайне, когда нужно действовать в неопределённости.
+    \item В дальнейшем: расширение гибридной модели, учёт временной изменчивости.
+  \end{itemize}
+\end{frame}
+
+\end{document}
